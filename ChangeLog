@@ -1,0 +1,8 @@
+
+%changelog
+
+* 2020-04-14 - v1.0.0
+	- Initial public version
+	- Support reuse eBPF key when decoder
+	- Support kubernetes namespace, pod container name as label
+	- Support node_id in Kubernetes environment

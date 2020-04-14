@@ -1,0 +1,100 @@
+programs:
+  - name: drsnoop
+    metrics:
+      histograms:
+        - name: direct_reclaim_latency_seconds
+          help: Direct reclaim memory latency histogram
+          table: direct_reclaim_latency
+          bucket_type: exp2
+          bucket_min: 0
+          bucket_max: 26
+          bucket_multiplier: 0.000001 # microseconds to seconds
+          labels:
+            - name: app_namespace
+              size: 8
+              reuse: true
+              decoders:
+                - name: kube_podnamespace
+            - name: app_container
+              size: 8
+              reuse: false
+              decoders:
+                - name: kube_containername
+            - name: bucket
+              size: 8
+              reuse: false
+              decoders:
+                - name: uint
+    tracepoints:
+      vmscan:mm_vmscan_direct_reclaim_begin: tracepoint__vmscan__mm_vmscan_direct_reclaim_begin
+      vmscan:mm_vmscan_direct_reclaim_end: tracepoint__vmscan__mm_vmscan_direct_reclaim_end
+    code: |
+
+      #include <uapi/linux/ptrace.h>
+      #include <linux/sched.h>
+      #include <linux/mmzone.h>
+      
+      typedef struct pid_key {
+          u64 pid;
+          u64 slot;
+      } pid_key_t;
+
+      // 27 buckets for latency, max range is 33.6s .. 67.1s
+      const u8 max_latency_slot = 26;
+      // Histograms to record latencies
+      BPF_HISTOGRAM(direct_reclaim_latency, pid_key_t, max_latency_slot + 2);
+
+      struct val_t {
+          u64 id;
+          u64 ts; // start time
+      };
+      BPF_HASH(start, u64, struct val_t);
+
+      TRACEPOINT_PROBE(vmscan, mm_vmscan_direct_reclaim_begin) {
+          u64 id = bpf_get_current_pid_tgid();
+          struct val_t val = {.id = id};
+          val.ts = bpf_ktime_get_ns();
+          start.update(&id, &val);
+          return 0;
+      }
+      TRACEPOINT_PROBE(vmscan, mm_vmscan_direct_reclaim_end) {
+          u64 id = bpf_get_current_pid_tgid();
+          u64 pid = id >> 32; // PID is higher part
+          struct val_t *valp;
+          u64 ts = bpf_ktime_get_ns();
+          valp = start.lookup(&id);
+          if (valp == NULL) {
+              // missed entry
+              return 0;
+          }
+
+          // Latency in microseconds
+          u64 latency_us = bpf_ktime_get_ns() - valp->ts;
+          // Skip entries with backwards time: temp workaround for https://github.com/iovisor/bcc/issues/728
+          if ((s64) latency_us < 0) {
+            start.delete(&id);
+            return 0;
+          }
+          // Convert to microseconds
+          latency_us /= 1000;
+
+          // Latency histogram key
+          u64 latency_slot = bpf_log2l(latency_us);
+
+          // Cap latency bucket at max value
+          if (latency_slot > max_latency_slot) {
+              latency_slot = max_latency_slot;
+          }
+
+          pid_key_t latency_key = { .pid = pid, .slot = latency_slot };
+
+          // Increment bucket key
+          direct_reclaim_latency.increment(latency_key);
+
+          // Increment sum key
+          latency_key.slot = max_latency_slot + 1;
+          direct_reclaim_latency.increment(latency_key, latency_us);
+
+          start.delete(&id);
+          return 0;
+      }
