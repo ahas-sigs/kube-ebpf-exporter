@@ -1,0 +1,57 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: ahas-sigs
+  name: ahas-agent
+
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: ahas-sigs
+  name: ahas-agent
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        rbac.agent.ahas/aggregate-to-ahas-agent: "true"
+rules: []
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ahas-agent-rules
+  namespace: ahas-sigs
+  labels:
+    rbac.agent.ahas/aggregate-to-ahas-agent: "true"
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch"]
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: ahas-sigs
+  name: ahas-agent
+subjects:
+  - kind: ServiceAccount
+    name: ahas-agent
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: ahas-agent
+  apiGroup: rbac.authorization.k8s.io

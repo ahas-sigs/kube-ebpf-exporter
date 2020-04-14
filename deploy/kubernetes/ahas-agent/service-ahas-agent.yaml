@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    k8s-app: ahas-agent
+  name: ahas-agent
+  namespace: ahas-sigs
+spec:
+  clusterIP: None
+  ports:
+  - name: http
+    port: 9435
+  selector:
+    app: ahas-agent

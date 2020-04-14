@@ -1,0 +1,92 @@
+---
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: ahas-agent
+  namespace: ahas-sigs
+  labels:
+    app: ahas-agent
+spec:
+  selector:
+    matchLabels:
+      app: ahas-agent
+  template:
+    metadata:
+      labels:
+        app: ahas-agent
+      annotations:
+        log-name: ahas-agent
+        prometheus_io_scrape: "true"
+    spec:
+      serviceAccount: ahas-agent
+      hostPID: true
+      hostNetwork: false
+      dnsPolicy: Default
+      tolerations:
+      - operator: "Exists"
+      imagePullSecrets:
+      - name: default-secret
+      containers:
+        - name: kube-ebpf-exporter
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: huaizong/ahas-sigs-kube-ebpf-exporter:v1.0.0
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 200m
+              memory: 128Mi
+          env:
+            - name: AHAS_LISTEN_PORT
+              value: "9435"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: lib-modules
+              mountPath: /lib/modules
+            - name: kernel-src
+              mountPath: /usr/src/kernels
+            - name: kernel-debug
+              mountPath: /sys/kernel/debug
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+          imagePullPolicy: "IfNotPresent"
+          ports:
+          - containerPort: 9435
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: kernel-debug
+          hostPath:
+            path: /sys/kernel/debug
+        - name: kernel-src
+          hostPath:
+            path: /usr/src/kernels
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+        - name: host-dev
+          hostPath:
+            path: /dev
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock

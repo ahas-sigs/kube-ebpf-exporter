@@ -25,6 +25,17 @@ An easy way of thinking about this exporter is bcc tools as prometheus metrics:
 * https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md
 * http://www.brendangregg.com/ebpf.html
 
+## Deploy
+
+To deploy, you need to have `kernel-devel` installed:
+
+```
+yum install kernel-devel -y
+```
+
+```
+```
+
 ## Building and running
 
 To build, you need to have `libbcc` installed:
@@ -79,3 +90,38 @@ You can find additional examples in [examples](examples) directory.
 
 Unless otherwise specified, all examples are expected to work on centos kernel 3.10.0-1062,
 which is the current kernerl version of Centos 7.
+
+```
+# HELP ebpf_exporter_tcp_connect_latency_seconds Tcp connect latency histogram
+# TYPE ebpf_exporter_tcp_connect_latency_seconds histogram
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="1e-06"} 0
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="2e-06"} 0
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="4e-06"} 0
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="8e-06"} 0
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="1.6e-05"} 0
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="3.2e-05"} 0
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="6.4e-05"} 2
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.000128"} 6
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.000256"} 8
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.000512"} 9
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.001024"} 9
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.002048"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.004096"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.008192"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.016384"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.032768"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.065536"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.131072"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.262144"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="0.524288"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="1.048576"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="2.097152"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="4.194304"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="8.388608"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="16.777216"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="33.554432"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="67.108864"} 10
+ebpf_exporter_tcp_connect_latency_seconds_bucket{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127",le="+Inf"} 10
+ebpf_exporter_tcp_connect_latency_seconds_sum{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127"} 0.002206
+ebpf_exporter_tcp_connect_latency_seconds_count{app_container="coredns",app_namespace="kube-system",node_id="localhost",subnet="127"} 10
+```
