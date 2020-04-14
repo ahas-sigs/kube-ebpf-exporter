@@ -5,4 +5,4 @@ docker build --no-cache -t kube-ebpf-exporter:$version .
 
 docker tag kube-ebpf-exporter:$version huaizong/ahas-sigs-kube-ebpf-exporter:$version
 
-docker push huaizong/kube-ahas-ebpf-exporter:$version
+docker push huaizong/ahas-sigs-kube-ebpf-exporter:$version
