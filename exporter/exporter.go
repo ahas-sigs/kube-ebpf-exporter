@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/iovisor/gobpf/bcc"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/ahas-sigs/kube-ebpf-exporter/config"
 	"github.com/ahas-sigs/kube-ebpf-exporter/decoder"
+	"github.com/iovisor/gobpf/bcc"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Namespace to use for all metrics
