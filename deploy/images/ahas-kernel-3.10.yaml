@@ -16,15 +16,18 @@ programs:
           bucket_multiplier: 0.000001 # microseconds to seconds
           labels:
             - name: app_namespace
-              size: 4
+              size: 8
+              reuse: true
               decoders:
                 - name: kube_podnamespace
             - name: app_container
-              size: 4
+              size: 8
+              reuse: false
               decoders:
                 - name: kube_containername
             - name: operation
               size: 8
+              reuse: false
               decoders:
                 - name: uint
                 - name: static_map
@@ -33,10 +36,12 @@ programs:
                     2: write
             - name: device
               size: 32
+              reuse: false
               decoders:
                 - name: string
             - name: bucket
               size: 8
+              reuse: false
               decoders:
                 - name: uint
         - name: bio_size_bytes
@@ -48,15 +53,18 @@ programs:
           bucket_multiplier: 1024 # kibibytes to bytes
           labels:
             - name: app_namespace
-              size: 4
+              size: 8
+              reuse: true
               decoders:
                 - name: kube_podnamespace
             - name: app_container
-              size: 4
+              size: 8
+              reuse: false
               decoders:
                 - name: kube_containername
             - name: operation
               size: 8
+              reuse: false
               decoders:
                 - name: uint
                 - name: static_map
@@ -65,10 +73,12 @@ programs:
                     2: write
             - name: device
               size: 32
+              reuse: false
               decoders:
                 - name: string
             - name: bucket
               size: 8
+              reuse: false
               decoders:
                 - name: uint
     kprobes:
@@ -84,8 +94,7 @@ programs:
       #endif
 
       typedef struct disk_key {
-          u32 pid;
-          u32 pid_dup;
+          u64 pid;
           u64 op;
           char disk[32];
           u64 slot;
@@ -155,9 +164,9 @@ programs:
               latency_slot = max_latency_slot;
           }
 
-          u32 pid = bpf_get_current_pid_tgid() >> 32;
+          u64 pid = bpf_get_current_pid_tgid() >> 32;
 
-          disk_key_t latency_key = { .pid = pid, .pid_dup = pid, .slot = latency_slot };
+          disk_key_t latency_key = { .pid = pid, .slot = latency_slot };
           bpf_probe_read(&latency_key.disk, sizeof(latency_key.disk), &disk->disk_name);
 
           // Size in kibibytes
@@ -171,7 +180,7 @@ programs:
               size_slot = max_size_slot;
           }
 
-          disk_key_t size_key = { .pid = pid, .pid_dup = pid, .slot = size_slot };
+          disk_key_t size_key = { .pid = pid, .slot = size_slot };
           bpf_probe_read(&size_key.disk, sizeof(size_key.disk), &disk->disk_name);
 
           if ((req->cmd_flags & REQ_COMMON_MASK) == REQ_OP_WRITE) {
@@ -209,6 +218,7 @@ programs:
           labels:
             - name: bucket
               size: 8
+              reuse: true
               decoders:
                 - name: uint
     kprobes:
@@ -225,10 +235,10 @@ programs:
       BPF_HISTOGRAM(run_queue_latency, u64, max_latency_slot + 2);
 
       // Pid to enqueue time map
-      BPF_HASH(start, u32);
+      BPF_HASH(start, u64);
 
       // Record enqueue timestamp
-      static int trace_enqueue(u32 tgid, u32 pid) {
+      static int trace_enqueue(u32 tgid, u64 pid) {
           if (tgid == 0 && pid == 0) {
               // Skip swapper kthread
               return 0;
@@ -256,7 +266,7 @@ programs:
           }
 
           u32 tgid = bpf_get_current_pid_tgid() >> 32;
-          u32 pid = bpf_get_current_pid_tgid();
+          u64 pid = bpf_get_current_pid_tgid();
 
           // Fetch timestamp and calculate delta
           u64 *tsp = start.lookup(&pid);
@@ -305,15 +315,23 @@ programs:
           table: counts
           labels:
             - name: app_namespace
-              size: 4
+              size: 8
+              reuse: true
               decoders:
                 - name: kube_podnamespace
             - name: app_container
-              size: 4
+              size: 8
+              reuse: true
               decoders:
                 - name: kube_containernamepid
+            - name: app_pid
+              size: 8
+              reuse: false
+              decoders:
+                - name: uint
             - name: function
               size: 8
+              reuse: false
               decoders:
                 - name: uint
                 - name: static_map
@@ -324,6 +342,7 @@ programs:
                     4: connect_refuse
             - name: command
               size: 128
+              reuse: false
               decoders:
                 - name: string
     tracepoints:
@@ -341,8 +360,7 @@ programs:
       };
 
       struct key_t {
-          u32 pid;
-          u32 pid_dup;
+          u64 pid;
           u64 op;
           char comm[128];
       };
@@ -361,8 +379,8 @@ programs:
       }
 
       static int count_connect_return(int ret) {
-          u32 pid = bpf_get_current_pid_tgid() >> 32;
-          struct key_t key = { .pid = pid, .pid_dup = pid };
+          u64 pid = bpf_get_current_pid_tgid() >> 32;
+          struct key_t key = { .pid = pid};
           bpf_get_current_comm(&key.comm, sizeof(key.comm));
           if (ret == -EADDRINUSE) {
               key.op = S_CONNECT;
@@ -402,19 +420,23 @@ programs:
           bucket_multiplier: 0.000001 # microseconds to seconds
           labels:
             - name: app_namespace
-              size: 4
+              size: 8
+              reuse: true
               decoders:
                 - name: kube_podnamespace
             - name: app_container
-              size: 4
+              size: 8
+              reuse: false
               decoders:
                 - name: kube_containername
             - name: subnet
               size: 8
+              reuse: false
               decoders:
                 - name: uint
             - name: bucket
               size: 8
+              reuse: false
               decoders:
                 - name: uint
     kprobes:
@@ -428,8 +450,7 @@ programs:
       #include <bcc/proto.h>
 
       typedef struct pid_key {
-          u32 pid;
-          u32 pid_dup;
+          u64 pid;
           u64 subnet;
           u64 slot;
       } pid_key_t;
@@ -483,8 +504,8 @@ programs:
           }
 
           u64 id = bpf_get_current_pid_tgid();
-          u32 pid = id >> 32; // PID is higher part
-          pid_key_t latency_key = { .pid = pid, .pid_dup = pid, .slot = latency_slot };
+          u64 pid = id >> 32; // PID is higher part
+          pid_key_t latency_key = { .pid = pid, .slot = latency_slot };
           u32 addr = 0;
           u16 family = 0;
           family = skp->__sk_common.skc_family;
@@ -522,15 +543,18 @@ programs:
           bucket_multiplier: 0.000001 # microseconds to seconds
           labels:
             - name: app_namespace
-              size: 4
+              size: 8
+              reuse: true
               decoders:
                 - name: kube_podnamespace
             - name: app_container
-              size: 4
+              size: 8
+              reuse: false
               decoders:
                 - name: kube_containername
             - name: bucket
               size: 8
+              reuse: false
               decoders:
                 - name: uint
     tracepoints:
@@ -543,8 +567,7 @@ programs:
       #include <linux/mmzone.h>
       
       typedef struct pid_key {
-          u32 pid;
-          u32 pid_dup;
+          u64 pid;
           u64 slot;
       } pid_key_t;
 
@@ -568,7 +591,7 @@ programs:
       }
       TRACEPOINT_PROBE(vmscan, mm_vmscan_direct_reclaim_end) {
           u64 id = bpf_get_current_pid_tgid();
-          u32 pid = id >> 32; // PID is higher part
+          u64 pid = id >> 32; // PID is higher part
           struct val_t *valp;
           u64 ts = bpf_ktime_get_ns();
           valp = start.lookup(&id);
@@ -595,7 +618,7 @@ programs:
               latency_slot = max_latency_slot;
           }
 
-          pid_key_t latency_key = { .pid = pid, .pid_dup = pid, .slot = latency_slot };
+          pid_key_t latency_key = { .pid = pid, .slot = latency_slot };
 
           // Increment bucket key
           direct_reclaim_latency.increment(latency_key);
