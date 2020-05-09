@@ -1,6 +1,7 @@
 # kube-ebpf-exporter
 
 [![Build Status](https://travis-ci.org/ahas-sigs/kube-ebpf-exporter.svg?branch=master)](https://travis-ci.org/ahas-sigs/kube-ebpf-exporter)
+[![Coverage](https://codecov.io/gh/ahas-sigs/kube-ebpf-exporter/branch/master/graph/badge.svg)](https://codecov.io/gh/ahas-sigs/kube-ebpf-exporter)
 
 Prometheus exporter for custom eBPF metrics.
 
