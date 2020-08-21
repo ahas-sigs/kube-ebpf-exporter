@@ -35,6 +35,12 @@ rules:
     resources: ["namespaces"]
     verbs: ["get", "list"]
   - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
     resources: ["persistentvolumes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["storage.k8s.io"]
@@ -50,7 +56,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: ahas-agent
-    namespace: default
+    namespace: ahas-agent
 roleRef:
   kind: ClusterRole
   name: ahas-agent
