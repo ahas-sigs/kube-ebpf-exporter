@@ -57,7 +57,7 @@ func (k *KubePodNamespace) Decode(in []byte, conf config.Decoder) ([]byte, error
 	byteOrder := bcc.GetHostByteOrder()
 	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
         if err != nil {
-          return nil, nil
+          return nil, ErrSkipLabelSet
         }
 	b := []byte(info.kubePodNamespace)
 	return b, nil
@@ -68,7 +68,7 @@ func (k *KubePodName) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
 	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
         if err != nil {
-          return nil, nil
+          return nil, ErrSkipLabelSet
         }
 	b := []byte(info.kubePodName)
 	return b, nil
@@ -79,7 +79,7 @@ func (k *KubeContainerName) Decode(in []byte, conf config.Decoder) ([]byte, erro
 	byteOrder := bcc.GetHostByteOrder()
 	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
         if err != nil {
-          return nil, nil
+          return nil, ErrSkipLabelSet
         }
 	b := []byte(info.kubeContainerName)
 	return b, nil
@@ -90,7 +90,7 @@ func (k *KubeContainerNameOrPid) Decode(in []byte, conf config.Decoder) ([]byte,
 	byteOrder := bcc.GetHostByteOrder()
 	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
         if err != nil {
-           return nil, nil
+           return nil, ErrSkipLabelSet
         }
 	if info.kubeContainerName == DefaultKubeContextValue {
 		info.kubeContainerName = fmt.Sprintf("pid-%d", byteOrder.Uint32(in))
@@ -129,7 +129,7 @@ func (k *KubeContext) getKubeInfo(pid uint32) (info KubeInfo, err error) {
 		cgroup := strings.Split(parts[2], "/")
 		containerID := cgroup[len(cgroup)-1]
 		if len(containerID) == 64 {
-			info = k.inspectKubeInfo(containerID)
+			info, err = k.inspectKubeInfo(containerID)
 			return
 		}
 	}
@@ -138,7 +138,7 @@ func (k *KubeContext) getKubeInfo(pid uint32) (info KubeInfo, err error) {
 }
 
 // inspectKubeInfo use docker client library to get kubernetes labels value
-func (k *KubeContext) inspectKubeInfo(containerID string) (info KubeInfo) {
+func (k *KubeContext) inspectKubeInfo(containerID string) (info KubeInfo, err error) {
 	/// store more than 1000 container, need clean it for reduce memory use
 	if k.kubeContext == nil || len(k.kubeContext) > 1000 {
 		k.kubeContext = make(map[string]KubeInfo)
