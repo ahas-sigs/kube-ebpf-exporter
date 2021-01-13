@@ -133,6 +133,7 @@ func (k *KubeContext) getKubeInfo(pid uint32) (info KubeInfo, err error) {
 			return
 		}
 	}
+        err = fmt.Errorf("kubeinfo match failed")
 	return
 }
 
