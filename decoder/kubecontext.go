@@ -129,7 +129,7 @@ func (k *KubeContext) getKubeInfo(pid uint32) (info KubeInfo, err error) {
 		cgroup := strings.Split(parts[2], "/")
 		containerID := cgroup[len(cgroup)-1]
 		if len(containerID) == 64 {
-			info = k.inspectKubeInfo(containerID)
+			info, err = k.inspectKubeInfo(containerID)
 			return
 		}
 	}
@@ -138,7 +138,7 @@ func (k *KubeContext) getKubeInfo(pid uint32) (info KubeInfo, err error) {
 }
 
 // inspectKubeInfo use docker client library to get kubernetes labels value
-func (k *KubeContext) inspectKubeInfo(containerID string) (info KubeInfo) {
+func (k *KubeContext) inspectKubeInfo(containerID string) (info KubeInfo, err error) {
 	/// store more than 1000 container, need clean it for reduce memory use
 	if k.kubeContext == nil || len(k.kubeContext) > 1000 {
 		k.kubeContext = make(map[string]KubeInfo)
