@@ -82,6 +82,7 @@ func (k *KubeContainerNameOrPid) Decode(in []byte, conf config.Decoder) ([]byte,
 	info := k.ctx.getKubeInfo(byteOrder.Uint32(in))
 	if info.kubeContainerName == DefaultKubeContextValue {
 		info.kubeContainerName = fmt.Sprintf("pid-%d", byteOrder.Uint32(in))
+		return nil, nil
 	}
 	b := []byte(info.kubeContainerName)
 	return b, nil
