@@ -2,8 +2,14 @@ package exporter
 
 import (
 	"fmt"
+	"os"
 	"log"
+	"time"
+	"strings"
 	"net/http"
+	"bufio"
+	"encoding/json"
+	"compress/gzip"
 	"strconv"
 
 	"github.com/ahas-sigs/kube-ebpf-exporter/config"
@@ -11,13 +17,58 @@ import (
 	"github.com/iovisor/gobpf/bcc"
 	"github.com/prometheus/client_golang/prometheus"
 )
+var (
+	ahasSinkNodeCluster = "default"
+	ahasSinkNodeZone = "default"
+	ahasSinkNodeRegion = "default"
+	ahasSinkNodeProvider = "default"
+)
+const (
+	// Namespace to use for all metrics
+	prometheusNamespace = "ebpf_exporter"
+	ahasSinkRootPath = "/ahas-workspace/data/ahas/ahas-agent/ebpf-exporter/data"
+)
+const (
+	ahasEventNodeKey = "ahas_event_node"
+	ahasEventClusterKey = "ahas_event_cluster"
+	ahasEventZoneKey = "ahas_event_zone"
+	ahasEventRegionKey = "ahas_event_region"
+	ahasEventProviderKey = "ahas_event_provider"
+	ahasEventTimeKey = "ahas_event_time"
+	ahasEventNameKey = "ahas_event_name"
+	ahasEventValueKey = "ahas_event_value"
+	ahasEventEbpfExporterStart = "ahas-sigs.cloudevents.kube-ebpf-exporter.start"
+	ahasEventPath = "/ahas-workspace/data/ahas/ahas-agent/ebpf-exporter/event.dat"
+)
+const (
+	ahasSinkNodeKey = "ahas_sink_node"
+	ahasSinkClusterKey = "ahas_sink_cluster"
+	ahasSinkZoneKey = "ahas_sink_zone"
+	ahasSinkRegionKey = "ahas_sink_region"
+	ahasSinkProviderKey = "ahas_sink_provider"
+	ahasSinkTimeKey = "ahas_sink_time"
+	ahasSinkNameKey = "ahas_sink_name"
+	ahasSinkValueKey = "ahas_sink_value"
+)
 
-// Namespace to use for all metrics
-const prometheusNamespace = "ebpf_exporter"
+const (
+	///only enable export, disable sink, default mode
+	Sink_Mode_None = 0
+	///enable sink and export
+	Sink_Mode_Include_Export = 1
+	///only enable sink, disable export
+	Sink_Mode_Exclude_Export = 2
+)
 
 // Exporter is a ebpf_exporter instance implementing prometheus.Collector
 type Exporter struct {
 	nodeID              string
+	nodeZone	    string
+	nodeRegion	    string
+	nodeProvider	    string
+	nodeCluster         string
+	sinkRoot            string
+	sinkOutPutFile      string
 	config              config.Config
 	modules             map[string]*bcc.Module
 	ksyms               map[uint64]string
@@ -45,8 +96,38 @@ func New(nodeID string, config config.Config) *Exporter {
 		nil,
 	)
 
+	nodeProvider := os.Getenv("AHAS_NODE_PROVIDER")
+	if len(nodeProvider) > 1 {
+		ahasSinkNodeProvider = nodeProvider
+	}
+	nodeRegion := os.Getenv("AHAS_NODE_REGION")
+	if len(nodeRegion) > 1 {
+		ahasSinkNodeRegion = nodeRegion
+	}
+	nodeZone := os.Getenv("AHAS_NODE_ZONE")
+	if len(nodeZone) > 1 {
+		ahasSinkNodeZone = nodeZone
+	}
+	nodeCluster := os.Getenv("AHAS_NODE_CLUSTER")
+	if len(nodeCluster) > 1 {
+		ahasSinkNodeCluster = nodeCluster
+	}
+
+	sinkRoot := fmt.Sprintf("%s/%s-%s/node/%s",
+		ahasSinkRootPath,
+		ahasSinkNodeProvider,
+		ahasSinkNodeCluster,
+		nodeID)
+        _ = os.MkdirAll(sinkRoot, 0777)
+
 	return &Exporter{
 		nodeID:              nodeID,
+		nodeZone:            ahasSinkNodeZone,
+		nodeCluster:         ahasSinkNodeCluster,
+		nodeRegion:          ahasSinkNodeRegion,
+		nodeProvider:        ahasSinkNodeProvider,
+		sinkRoot:            sinkRoot,
+		sinkOutPutFile:      sinkRoot,
 		config:              config,
 		modules:             map[string]*bcc.Module{},
 		ksyms:               map[uint64]string{},
@@ -92,7 +173,6 @@ func (e *Exporter) Attach() error {
 
 		e.modules[program.Name] = module
 	}
-
 	return nil
 }
 
@@ -150,9 +230,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 // collectCounters sends all known counters to prometheus
 func (e *Exporter) collectCounters(ch chan<- prometheus.Metric) {
+	allSinkValues := []string{}
 	for _, program := range e.config.Programs {
 		for _, counter := range program.Metrics.Counters {
-			tableValues, err := e.tableValues(e.modules[program.Name], counter.Table, counter.Labels)
+			tableValues, sinkValues, err := e.tableValues(e.modules[program.Name], counter.Table, counter.Labels)
 			if err != nil {
 				log.Printf("Error getting table %q values for metric %q of program %q: %s", counter.Table, counter.Name, program.Name, err)
 				continue
@@ -160,10 +241,16 @@ func (e *Exporter) collectCounters(ch chan<- prometheus.Metric) {
 
 			desc := e.descs[program.Name][counter.Name]
 
-			for _, metricValue := range tableValues {
-				ch <- prometheus.MustNewConstMetric(desc, prometheus.CounterValue, metricValue.value, metricValue.labels...)
+			if counter.SinkMode != Sink_Mode_Exclude_Export {
+				for _, metricValue := range tableValues {
+					ch <- prometheus.MustNewConstMetric(desc, prometheus.CounterValue, metricValue.value, metricValue.labels...)
+				}
+			}
+			if counter.SinkMode != Sink_Mode_None {
+				allSinkValues = append(allSinkValues, sinkValues...)
 			}
 		}
+		e.dumpSinkValues(allSinkValues)
 	}
 }
 
@@ -175,7 +262,7 @@ func (e *Exporter) collectHistograms(ch chan<- prometheus.Metric) {
 
 			histograms := map[string]histogramWithLabels{}
 
-			tableValues, err := e.tableValues(e.modules[program.Name], histogram.Table, histogram.Labels)
+			tableValues, _, err := e.tableValues(e.modules[program.Name], histogram.Table, histogram.Labels)
 			if err != nil {
 				log.Printf("Error getting table %q values for metric %q of program %q: %s", histogram.Table, histogram.Name, program.Name, err)
 				continue
@@ -237,17 +324,19 @@ func (e *Exporter) collectHistograms(ch chan<- prometheus.Metric) {
 }
 
 // tableValues returns values in the requested table to be used in metircs
-func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []config.Label) ([]metricValue, error) {
-	values := []metricValue{}
+func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []config.Label) ([]metricValue, []string, error) {
+        sinkValues := []string{}
+	exportValues := []metricValue{}
 
 	table := bcc.NewTable(module.TableId(tableName), module)
 	iter := table.Iter()
-
+        t := time.Now()
+	timeNow := t.UnixNano()
 	for iter.Next() {
 		key := iter.Key()
 		raw, err := table.KeyBytesToStr(key)
 		if err != nil {
-			return nil, fmt.Errorf("error decoding key %v", key)
+			return nil, nil, fmt.Errorf("error decoding key %v", key)
 		}
 
 		mv := metricValue{
@@ -261,15 +350,32 @@ func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []co
 				continue
 			}
 
-			return nil, err
+			return nil, nil, err
 		}
 
 		mv.value = float64(bcc.GetHostByteOrder().Uint64(iter.Leaf()))
 
-		values = append(values, mv)
-	}
+		exportValues = append(exportValues, mv)
 
-	return values, nil
+		sinkInfo := make(map[string]interface{})
+		for idx, label := range labels {
+			sinkInfo[label.Name] = mv.labels[idx]
+		}
+		sinkInfo[ahasSinkTimeKey] = timeNow
+		sinkInfo[ahasSinkNameKey] = tableName
+		sinkInfo[ahasSinkNodeKey] = e.nodeID
+		sinkInfo[ahasSinkZoneKey] = e.nodeZone
+		sinkInfo[ahasSinkRegionKey] = e.nodeRegion
+		sinkInfo[ahasSinkProviderKey] = e.nodeProvider
+		sinkInfo[ahasSinkClusterKey] = e.nodeCluster
+		sinkInfo[ahasSinkValueKey] = mv.value
+		jsonStr, err := json.Marshal(sinkInfo)
+		if err == nil {
+			sinkValues = append(sinkValues, fmt.Sprintf("%s\n", string(jsonStr)))
+		}
+				
+	}
+	return exportValues, sinkValues, nil
 }
 
 func (e Exporter) exportTables() (map[string]map[string][]metricValue, error) {
@@ -300,7 +406,7 @@ func (e Exporter) exportTables() (map[string]map[string][]metricValue, error) {
 		}
 
 		for name, labels := range metricTables {
-			metricValues, err := e.tableValues(e.modules[program.Name], name, labels)
+			metricValues, _, err := e.tableValues(e.modules[program.Name], name, labels)
 			if err != nil {
 				return nil, fmt.Errorf("error getting values for table %q of program %q: %s", name, program.Name, err)
 			}
@@ -356,4 +462,58 @@ type metricValue struct {
 	labels []string
 	// value is the kernel map value
 	value float64
+}
+
+func (e *Exporter)addSinkEvent() {
+	eventInfo := make(map[string]interface{})
+	eventInfo[ahasEventNodeKey] = e.nodeID
+	eventInfo[ahasEventZoneKey] = e.nodeZone
+	eventInfo[ahasEventRegionKey] = e.nodeRegion
+	eventInfo[ahasEventProviderKey] = e.nodeProvider
+	eventInfo[ahasEventClusterKey] = e.nodeCluster
+	eventInfo[ahasEventTimeKey] = time.Now().UnixNano()
+	eventInfo[ahasEventNameKey] = ahasEventEbpfExporterStart
+	eventInfo[ahasEventValueKey] = e.sinkOutPutFile
+
+	fl, err := os.OpenFile(ahasEventPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	if err != nil  {
+		log.Printf("open %s fail, %s", ahasEventPath, err)
+		return
+	}
+	data, err := json.Marshal(eventInfo)
+	if err != nil {
+		log.Printf("write %s fail, %s", ahasEventPath, err)
+		return
+	}
+        rawEvent := fmt.Sprintf("%s\n", data)
+	_, err = fl.Write([]byte(rawEvent))
+	if err != nil  {
+		log.Printf("write %s fail, %s", ahasEventPath, err)
+		return
+	}
+}
+
+func (e *Exporter)dumpSinkValues(sinkValues []string) {
+	if len(sinkValues) < 1 {
+		return
+	}
+	timeNow := time.Now()
+        sinkOutPutFile := fmt.Sprintf("%s/%s.gz", e.sinkRoot, timeNow.Format("2006010215"))	
+	if strings.Compare(sinkOutPutFile, e.sinkOutPutFile) != 0 {
+		e.sinkOutPutFile = sinkOutPutFile
+		e.addSinkEvent()
+	}
+	fl, err := os.OpenFile(e.sinkOutPutFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	if err != nil  {
+		log.Printf("open %s fail, %s", e.sinkOutPutFile, err)
+		return
+	}
+	defer fl.Close()
+	gf := gzip.NewWriter(fl)
+	fw := bufio.NewWriter(gf)
+	for _, data := range sinkValues {
+		fw.WriteString(data)
+	}
+	fw.Flush()
+	gf.Close()
 }
