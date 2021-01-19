@@ -7,6 +7,8 @@ RUN mkdir -p /ahas-sigs/kube-ebpf-exporter/ebpf
 COPY ahas-kernel-3.10.yaml /ahas-sigs/kube-ebpf-exporter
 COPY kube-ebpf-exporter /ahas-sigs/kube-ebpf-exporter/kube-ebpf-exporter
 RUN chmod +x /ahas-sigs/kube-ebpf-exporter/kube-ebpf-exporter
+ENV TimeZone=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TimeZone /etc/localtime && echo $TimeZone > /etc/timezone
 
 EXPOSE 9435/tcp
 WORKDIR /ahas-sigs/kube-ebpf-exporter

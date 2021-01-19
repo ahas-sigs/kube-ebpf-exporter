@@ -113,9 +113,10 @@ func New(nodeID string, config config.Config) *Exporter {
 		ahasSinkNodeCluster = nodeCluster
 	}
 
-	sinkRoot := fmt.Sprintf("%s/%s-%s/node/%s",
+	sinkRoot := fmt.Sprintf("%s/%s-%s-%s/node/%s",
 		ahasSinkRootPath,
 		ahasSinkNodeProvider,
+		ahasSinkNodeRegion,
 		ahasSinkNodeCluster,
 		nodeID)
         _ = os.MkdirAll(sinkRoot, 0777)
@@ -502,7 +503,7 @@ func (e *Exporter)dumpSinkValues(sinkValues []string) {
 		return
 	}
 	timeNow := time.Now()
-        sinkOutPutFile := fmt.Sprintf("%s/%s.gz", e.sinkRoot, timeNow.Format("2006010215"))	
+        sinkOutPutFile := fmt.Sprintf("%s/%s.gz", e.sinkRoot, timeNow.Local().Format("2006010215"))	
 	if strings.Compare(sinkOutPutFile, e.sinkOutPutFile) != 0 {
 		e.sinkOutPutFile = sinkOutPutFile
 		e.addSinkEvent()
