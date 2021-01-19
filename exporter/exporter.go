@@ -353,13 +353,17 @@ func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []co
 			return nil, nil, err
 		}
 
-		mv.value = float64(bcc.GetHostByteOrder().Uint64(iter.Leaf()))
+		value := bcc.GetHostByteOrder().Uint64(iter.Leaf())
+		mv.value = float64(value)
 
 		exportValues = append(exportValues, mv)
 
 		sinkInfo := make(map[string]interface{})
 		for idx, label := range labels {
 			sinkInfo[label.Name] = mv.labels[idx]
+		}
+		if value == 0 {
+			continue
 		}
 		sinkInfo[ahasSinkTimeKey] = timeNow
 		sinkInfo[ahasSinkNameKey] = tableName
