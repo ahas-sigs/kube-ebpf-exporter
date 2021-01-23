@@ -1,54 +1,56 @@
 package exporter
 
 import (
-	"fmt"
-	"os"
-	"log"
-	"time"
-	"strings"
-	"net/http"
 	"bufio"
-	"encoding/json"
 	"compress/gzip"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/ahas-sigs/kube-ebpf-exporter/config"
 	"github.com/ahas-sigs/kube-ebpf-exporter/decoder"
 	"github.com/iovisor/gobpf/bcc"
 	"github.com/prometheus/client_golang/prometheus"
 )
+
 var (
-	ahasSinkNodeCluster = "default"
-	ahasSinkNodeZone = "default"
-	ahasSinkNodeRegion = "default"
+	ahasSinkNodeCluster  = "default"
+	ahasSinkNodeZone     = "default"
+	ahasSinkNodeRegion   = "default"
 	ahasSinkNodeProvider = "default"
 )
+
 const (
 	// Namespace to use for all metrics
 	prometheusNamespace = "ebpf_exporter"
-	ahasSinkRootPath = "/ahas-workspace/data/ahas/ahas-agent/ebpf-exporter/data"
+	ahasSinkRootPath    = "/ahas-workspace/data/ahas/ahas-agent/ebpf-exporter/data"
 )
 const (
-	ahasEventNodeKey = "ahas_event_node"
-	ahasEventClusterKey = "ahas_event_cluster"
-	ahasEventZoneKey = "ahas_event_zone"
-	ahasEventRegionKey = "ahas_event_region"
-	ahasEventProviderKey = "ahas_event_provider"
-	ahasEventTimeKey = "ahas_event_time"
-	ahasEventNameKey = "ahas_event_name"
-	ahasEventValueKey = "ahas_event_value"
+	ahasEventNodeKey           = "ahas_event_node"
+	ahasEventClusterKey        = "ahas_event_cluster"
+	ahasEventZoneKey           = "ahas_event_zone"
+	ahasEventRegionKey         = "ahas_event_region"
+	ahasEventProviderKey       = "ahas_event_provider"
+	ahasEventTimeKey           = "ahas_event_time"
+	ahasEventNameKey           = "ahas_event_name"
+	ahasEventValueKey          = "ahas_event_value"
 	ahasEventEbpfExporterStart = "ahas-sigs.cloudevents.kube-ebpf-exporter.start"
-	ahasEventPath = "/ahas-workspace/data/ahas/ahas-agent/ebpf-exporter/event.dat"
+	ahasEventPath              = "/ahas-workspace/data/ahas/ahas-agent/ebpf-exporter/event.dat"
 )
 const (
-	ahasSinkNodeKey = "ahas_sink_node"
-	ahasSinkClusterKey = "ahas_sink_cluster"
-	ahasSinkZoneKey = "ahas_sink_zone"
-	ahasSinkRegionKey = "ahas_sink_region"
+	ahasSinkNodeKey     = "ahas_sink_node"
+	ahasSinkClusterKey  = "ahas_sink_cluster"
+	ahasSinkZoneKey     = "ahas_sink_zone"
+	ahasSinkRegionKey   = "ahas_sink_region"
 	ahasSinkProviderKey = "ahas_sink_provider"
-	ahasSinkTimeKey = "ahas_sink_time"
-	ahasSinkNameKey = "ahas_sink_name"
-	ahasSinkValueKey = "ahas_sink_value"
+	ahasSinkTimeKey     = "ahas_sink_time"
+	ahasSinkNameKey     = "ahas_sink_name"
+	ahasSinkValueKey    = "ahas_sink_value"
 )
 
 const (
@@ -63,9 +65,9 @@ const (
 // Exporter is a ebpf_exporter instance implementing prometheus.Collector
 type Exporter struct {
 	nodeID              string
-	nodeZone	    string
-	nodeRegion	    string
-	nodeProvider	    string
+	nodeZone            string
+	nodeRegion          string
+	nodeProvider        string
 	nodeCluster         string
 	sinkRoot            string
 	sinkOutPutFile      string
@@ -119,7 +121,7 @@ func New(nodeID string, config config.Config) *Exporter {
 		ahasSinkNodeRegion,
 		ahasSinkNodeCluster,
 		nodeID)
-        _ = os.MkdirAll(sinkRoot, 0777)
+	_ = os.MkdirAll(sinkRoot, 0777)
 
 	return &Exporter{
 		nodeID:              nodeID,
@@ -251,7 +253,7 @@ func (e *Exporter) collectCounters(ch chan<- prometheus.Metric) {
 				allSinkValues = append(allSinkValues, sinkValues...)
 			}
 		}
-		e.dumpSinkValues(allSinkValues)
+		go e.dumpSinkValues(allSinkValues)
 	}
 }
 
@@ -326,12 +328,12 @@ func (e *Exporter) collectHistograms(ch chan<- prometheus.Metric) {
 
 // tableValues returns values in the requested table to be used in metircs
 func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []config.Label) ([]metricValue, []string, error) {
-        sinkValues := []string{}
+	sinkValues := []string{}
 	exportValues := []metricValue{}
 
 	table := bcc.NewTable(module.TableId(tableName), module)
 	iter := table.Iter()
-        t := time.Now()
+	t := time.Now()
 	timeNow := t.UnixNano()
 	for iter.Next() {
 		key := iter.Key()
@@ -378,7 +380,7 @@ func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []co
 		if err == nil {
 			sinkValues = append(sinkValues, fmt.Sprintf("%s\n", string(jsonStr)))
 		}
-				
+
 	}
 	return exportValues, sinkValues, nil
 }
@@ -469,7 +471,7 @@ type metricValue struct {
 	value float64
 }
 
-func (e *Exporter)addSinkEvent() {
+func (e *Exporter) addSinkEvent() {
 	eventInfo := make(map[string]interface{})
 	eventInfo[ahasEventNodeKey] = e.nodeID
 	eventInfo[ahasEventZoneKey] = e.nodeZone
@@ -481,7 +483,7 @@ func (e *Exporter)addSinkEvent() {
 	eventInfo[ahasEventValueKey] = e.sinkOutPutFile
 
 	fl, err := os.OpenFile(ahasEventPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
-	if err != nil  {
+	if err != nil {
 		log.Printf("open %s fail, %s", ahasEventPath, err)
 		return
 	}
@@ -490,32 +492,32 @@ func (e *Exporter)addSinkEvent() {
 		log.Printf("write %s fail, %s", ahasEventPath, err)
 		return
 	}
-        rawEvent := fmt.Sprintf("%s\n", data)
+	rawEvent := fmt.Sprintf("%s\n", data)
 	_, err = fl.Write([]byte(rawEvent))
-	if err != nil  {
+	if err != nil {
 		log.Printf("write %s fail, %s", ahasEventPath, err)
 		return
 	}
 }
 
-func (e *Exporter)dumpSinkValues(sinkValues []string) {
+func (e *Exporter) dumpSinkValues(sinkValues []string) {
 	if len(sinkValues) < 1 {
 		return
 	}
 	timeNow := time.Now()
-        sinkOutPutFile := fmt.Sprintf("%s/%s.gz", e.sinkRoot, timeNow.Local().Format("2006010215"))	
+	sinkOutPutFile := fmt.Sprintf("%s/%s.gz", e.sinkRoot, timeNow.Local().Format("2006010215"))
 	if strings.Compare(sinkOutPutFile, e.sinkOutPutFile) != 0 {
 		e.sinkOutPutFile = sinkOutPutFile
 		e.addSinkEvent()
 	}
 	fl, err := os.OpenFile(e.sinkOutPutFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
-	if err != nil  {
+	if err != nil {
 		log.Printf("open %s fail, %s", e.sinkOutPutFile, err)
 		return
 	}
 	defer fl.Close()
-        gf, err := gzip.NewWriterLevel(fl, gzip.BestCompression)
-	if err != nil  {
+	gf, err := gzip.NewWriterLevel(fl, gzip.BestCompression)
+	if err != nil {
 		log.Printf("new gzip writer %s fail, %s", e.sinkOutPutFile, err)
 		return
 	}

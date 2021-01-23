@@ -56,9 +56,9 @@ type KubeContainerNameOrPid struct {
 func (k *KubePodNamespace) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
 	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
-        if err != nil {
-          return nil, ErrSkipLabelSet
-        }
+	if err != nil {
+		return nil, ErrSkipLabelSet
+	}
 	b := []byte(info.kubePodNamespace)
 	return b, nil
 }
@@ -67,9 +67,9 @@ func (k *KubePodNamespace) Decode(in []byte, conf config.Decoder) ([]byte, error
 func (k *KubePodName) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
 	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
-        if err != nil {
-          return nil, ErrSkipLabelSet
-        }
+	if err != nil {
+		return nil, ErrSkipLabelSet
+	}
 	b := []byte(info.kubePodName)
 	return b, nil
 }
@@ -78,9 +78,9 @@ func (k *KubePodName) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 func (k *KubeContainerName) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
 	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
-        if err != nil {
-          return nil, ErrSkipLabelSet
-        }
+	if err != nil {
+		return nil, ErrSkipLabelSet
+	}
 	b := []byte(info.kubeContainerName)
 	return b, nil
 }
@@ -89,9 +89,9 @@ func (k *KubeContainerName) Decode(in []byte, conf config.Decoder) ([]byte, erro
 func (k *KubeContainerNameOrPid) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
 	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
-        if err != nil {
-           return nil, ErrSkipLabelSet
-        }
+	if err != nil {
+		return nil, ErrSkipLabelSet
+	}
 	if info.kubeContainerName == DefaultKubeContextValue {
 		info.kubeContainerName = fmt.Sprintf("pid-%d", byteOrder.Uint32(in))
 		return nil, nil
@@ -133,7 +133,7 @@ func (k *KubeContext) getKubeInfo(pid uint32) (info KubeInfo, err error) {
 			return
 		}
 	}
-        err = fmt.Errorf("kubeinfo match failed")
+	err = fmt.Errorf("kubeinfo match failed")
 	return
 }
 
