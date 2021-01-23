@@ -523,7 +523,7 @@ func (e *Exporter) dumpSinkValues(sinkValues []string) {
 	}
 	fw := bufio.NewWriter(gf)
 	for _, data := range sinkValues {
-		fw.WriteString(data)
+		_, _ = fw.WriteString(data)
 	}
 	fw.Flush()
 	gf.Close()
