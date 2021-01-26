@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ahas-sigs/kube-ebpf-exporter/config"
@@ -79,6 +80,8 @@ type Exporter struct {
 	programTags         map[string]map[string]uint64
 	descs               map[string]map[string]*prometheus.Desc
 	decoders            *decoder.Set
+	sinkChan            chan []string
+	sinkMutex           sync.Mutex
 }
 
 // New creates a new exporter with the provided config
@@ -115,15 +118,13 @@ func New(nodeID string, config config.Config) *Exporter {
 		ahasSinkNodeCluster = nodeCluster
 	}
 
-	sinkRoot := fmt.Sprintf("%s/%s-%s-%s/node/%s",
+	sinkRoot := fmt.Sprintf("%s/%s/node/%s",
 		ahasSinkRootPath,
-		ahasSinkNodeProvider,
-		ahasSinkNodeRegion,
 		ahasSinkNodeCluster,
 		nodeID)
 	_ = os.MkdirAll(sinkRoot, 0777)
 
-	return &Exporter{
+	e := &Exporter{
 		nodeID:              nodeID,
 		nodeZone:            ahasSinkNodeZone,
 		nodeCluster:         ahasSinkNodeCluster,
@@ -139,7 +140,10 @@ func New(nodeID string, config config.Config) *Exporter {
 		programTags:         map[string]map[string]uint64{},
 		descs:               map[string]map[string]*prometheus.Desc{},
 		decoders:            decoder.NewSet(),
+		sinkChan:            make(chan []string, 5000),
 	}
+	go e.dumpSinkValues()
+	return e
 }
 
 // Attach injects eBPF into kernel and attaches necessary kprobes
@@ -253,7 +257,7 @@ func (e *Exporter) collectCounters(ch chan<- prometheus.Metric) {
 				allSinkValues = append(allSinkValues, sinkValues...)
 			}
 		}
-		go e.dumpSinkValues(allSinkValues)
+		e.sinkChan <- allSinkValues
 	}
 }
 
@@ -500,22 +504,27 @@ func (e *Exporter) addSinkEvent() {
 	}
 }
 
-func (e *Exporter) dumpSinkValues(sinkValues []string) {
-	if len(sinkValues) < 1 {
-		return
+func (e *Exporter) dumpSinkValues() {
+	for sinkValues := range e.sinkChan {
+		if len(sinkValues) < 1 {
+			continue
+		}
+		e.saveSinkValues(sinkValues)
 	}
+}
+func (e *Exporter) saveSinkValues(sinkValues []string) {
+	log.Printf("recv %d events", len(sinkValues))
+	e.sinkMutex.Lock()
+	defer e.sinkMutex.Lock()
 	timeNow := time.Now()
-	sinkOutPutFile := fmt.Sprintf("%s/%s.gz", e.sinkRoot, timeNow.Local().Format("2006010215"))
-	if strings.Compare(sinkOutPutFile, e.sinkOutPutFile) != 0 {
-		e.sinkOutPutFile = sinkOutPutFile
-		e.addSinkEvent()
-	}
-	fl, err := os.OpenFile(e.sinkOutPutFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	sinkOutPutFile := fmt.Sprintf("%s/%s.gz",
+		e.sinkRoot,
+		timeNow.Local().Format("2006010215"))
+	fl, err := os.OpenFile(sinkOutPutFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		log.Printf("open %s fail, %s", e.sinkOutPutFile, err)
 		return
 	}
-	defer fl.Close()
 	gf, err := gzip.NewWriterLevel(fl, gzip.BestCompression)
 	if err != nil {
 		log.Printf("new gzip writer %s fail, %s", e.sinkOutPutFile, err)
@@ -523,8 +532,14 @@ func (e *Exporter) dumpSinkValues(sinkValues []string) {
 	}
 	fw := bufio.NewWriter(gf)
 	for _, data := range sinkValues {
-		_, _ = fw.WriteString(data)
+		fw.WriteString(data)
 	}
 	fw.Flush()
 	gf.Close()
+	fl.Close()
+	if strings.Compare(sinkOutPutFile, e.sinkOutPutFile) != 0 {
+		e.sinkOutPutFile = sinkOutPutFile
+		e.addSinkEvent()
+	}
+	return
 }
