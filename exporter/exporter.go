@@ -528,6 +528,7 @@ func (e *Exporter) saveSinkValues(sinkValues []string) {
 	gf, err := gzip.NewWriterLevel(fl, gzip.BestCompression)
 	if err != nil {
 		log.Printf("new gzip writer %s fail, %s", e.sinkOutPutFile, err)
+		fl.Close()
 		return
 	}
 	fw := bufio.NewWriter(gf)
