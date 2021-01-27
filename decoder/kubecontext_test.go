@@ -14,7 +14,7 @@ func TestKubePodNamespaceDecoder(t *testing.T) {
 	}{
 		{
 			in:  []byte{0x0, 0x0, 0x0, 0x0},
-			out: []byte("unknown"),
+			out: nil,
 		},
 	}
 
@@ -22,7 +22,7 @@ func TestKubePodNamespaceDecoder(t *testing.T) {
 		d := &KubePodNamespace{}
 
 		out, err := d.Decode(c.in, config.Decoder{})
-		if err != nil {
+		if err != nil && err != ErrSkipLabelSet{
 			t.Errorf("Error decoding %#v to %#v: %s", c.in, c.out, err)
 		}
 
