@@ -515,7 +515,7 @@ func (e *Exporter) dumpSinkValues() {
 func (e *Exporter) saveSinkValues(sinkValues []string) {
 	log.Printf("recv %d events", len(sinkValues))
 	e.sinkMutex.Lock()
-	defer e.sinkMutex.Lock()
+	defer e.sinkMutex.Unlock()
 	timeNow := time.Now()
 	sinkOutPutFile := fmt.Sprintf("%s/%s.gz",
 		e.sinkRoot,
