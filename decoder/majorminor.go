@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ahas-sigs/kube-ebpf-exporter/config"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/config"
 	"github.com/iovisor/gobpf/bcc"
 	"golang.org/x/sys/unix"
 )

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/ahas-sigs/kube-ebpf-exporter/config"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/config"
 )
 
 // Regexp is a decoder that only allows inputs matching regexp

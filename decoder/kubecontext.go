@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/iovisor/gobpf/bcc"
 
-	"github.com/ahas-sigs/kube-ebpf-exporter/config"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/config"
 	"github.com/docker/docker/client"
 )
 

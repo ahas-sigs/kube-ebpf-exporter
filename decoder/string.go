@@ -1,7 +1,7 @@
 package decoder
 
 import (
-	"github.com/ahas-sigs/kube-ebpf-exporter/config"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/config"
 )
 
 // String is a decoded that decodes strings coming from the kernel

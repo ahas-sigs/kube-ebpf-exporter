@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/ahas-sigs/kube-ebpf-exporter/config"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/config"
 )
 
 type histogramWithLabels struct {

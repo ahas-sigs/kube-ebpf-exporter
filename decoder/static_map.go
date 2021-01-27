@@ -3,7 +3,7 @@ package decoder
 import (
 	"fmt"
 
-	"github.com/ahas-sigs/kube-ebpf-exporter/config"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/config"
 )
 
 // StaticMap is a decoded that maps values according to a static map

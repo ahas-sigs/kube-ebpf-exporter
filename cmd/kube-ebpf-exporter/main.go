@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/ahas-sigs/kube-ebpf-exporter/config"
-	"github.com/ahas-sigs/kube-ebpf-exporter/exporter"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/config"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/exporter"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"

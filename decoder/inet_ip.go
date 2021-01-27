@@ -3,7 +3,7 @@ package decoder
 import (
 	"net"
 
-	"github.com/ahas-sigs/kube-ebpf-exporter/config"
+	"github.com/ahas-sigs/kube-ebpf-exporter/v2/config"
 )
 
 // InetIP is a decoder that transforms an ip byte representation into a string
