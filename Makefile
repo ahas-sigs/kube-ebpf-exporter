@@ -7,6 +7,7 @@ RELEASE_AMD64_BINARY := $(RELEASES_DIR)/$(RELEASE_AMD64_DIR)/kube-ebpf-exporter
 
 .PHONY: release-binaries dev
 
+all: dev
 release-binaries:
 	rm -rf $(RELEASES_DIR)/*
 	mkdir -p $(RELEASES_DIR)/$(RELEASE_AMD64_DIR)
@@ -18,3 +19,4 @@ release-binaries:
 
 dev:
 	 GOFLAGS="-mod=vendor" go build  -v ./cmd/kube-ebpf-exporter
+	 ./kube-ebpf-exporter --config.file=examples/ahas-kernel-3.10.yaml 
