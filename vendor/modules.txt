@@ -1,6 +1,10 @@
 # github.com/Microsoft/go-winio v0.4.14
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/guid
+# github.com/ahas-sigs/kube-ebpf-exporter v1.1.9
+github.com/ahas-sigs/kube-ebpf-exporter/config
+github.com/ahas-sigs/kube-ebpf-exporter/decoder
+github.com/ahas-sigs/kube-ebpf-exporter/exporter
 # github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 github.com/alecthomas/template
 github.com/alecthomas/template/parse
