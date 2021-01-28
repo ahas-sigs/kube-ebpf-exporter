@@ -258,8 +258,8 @@ func (e *Exporter) collectCounters(ch chan<- prometheus.Metric) {
 				allSinkValues = append(allSinkValues, sinkValues...)
 			}
 		}
-		e.sinkChan <- allSinkValues
 	}
+	e.sinkChan <- allSinkValues
 }
 
 // collectHistograms sends all known historams to prometheus
