@@ -20,6 +20,7 @@ import (
 )
 
 var (
+	sinkChanMax          = 1000
 	ahasSinkNodeCluster  = "default"
 	ahasSinkNodeZone     = "default"
 	ahasSinkNodeRegion   = "default"
@@ -140,7 +141,7 @@ func New(nodeID string, config config.Config) *Exporter {
 		programTags:         map[string]map[string]uint64{},
 		descs:               map[string]map[string]*prometheus.Desc{},
 		decoders:            decoder.NewSet(),
-		sinkChan:            make(chan []string, 5000),
+		sinkChan:            make(chan []string, sinkChanMax),
 	}
 	go e.dumpSinkValues()
 	return e
