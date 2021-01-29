@@ -20,6 +20,7 @@ import (
 )
 
 var (
+	sinkChanMax          = 1000
 	ahasSinkNodeCluster  = "default"
 	ahasSinkNodeZone     = "default"
 	ahasSinkNodeRegion   = "default"
@@ -28,7 +29,7 @@ var (
 
 const (
 	// Namespace to use for all metrics
-	prometheusNamespace = "ebpf_exporter"
+	prometheusNamespace = "kube_ebpf_exporter"
 	ahasSinkRootPath    = "/ahas-workspace/data/ahas/ahas-agent/ebpf-exporter/data"
 )
 const (
@@ -140,7 +141,7 @@ func New(nodeID string, config config.Config) *Exporter {
 		programTags:         map[string]map[string]uint64{},
 		descs:               map[string]map[string]*prometheus.Desc{},
 		decoders:            decoder.NewSet(),
-		sinkChan:            make(chan []string, 5000),
+		sinkChan:            make(chan []string, sinkChanMax),
 	}
 	go e.dumpSinkValues()
 	return e
@@ -257,8 +258,8 @@ func (e *Exporter) collectCounters(ch chan<- prometheus.Metric) {
 				allSinkValues = append(allSinkValues, sinkValues...)
 			}
 		}
-		e.sinkChan <- allSinkValues
 	}
+	e.sinkChan <- allSinkValues
 }
 
 // collectHistograms sends all known historams to prometheus
@@ -330,6 +331,11 @@ func (e *Exporter) collectHistograms(ch chan<- prometheus.Metric) {
 	}
 }
 
+type downSampleSpec struct {
+	MetricValue metricValue
+	SinkValue   map[string]interface{}
+}
+
 // tableValues returns values in the requested table to be used in metircs
 func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []config.Label) ([]metricValue, []string, error) {
 	sinkValues := []string{}
@@ -339,7 +345,13 @@ func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []co
 	iter := table.Iter()
 	t := time.Now()
 	timeNow := t.UnixNano()
+	labelDownsample := make(map[string]downSampleSpec)
 	for iter.Next() {
+		value := bcc.GetHostByteOrder().Uint64(iter.Leaf())
+		if value == 0 {
+			continue
+		}
+
 		key := iter.Key()
 		raw, err := table.KeyBytesToStr(key)
 		if err != nil {
@@ -356,21 +368,14 @@ func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []co
 			if err == decoder.ErrSkipLabelSet {
 				continue
 			}
-
 			return nil, nil, err
 		}
 
-		value := bcc.GetHostByteOrder().Uint64(iter.Leaf())
 		mv.value = float64(value)
-
-		exportValues = append(exportValues, mv)
 
 		sinkInfo := make(map[string]interface{})
 		for idx, label := range labels {
 			sinkInfo[label.Name] = mv.labels[idx]
-		}
-		if value == 0 {
-			continue
 		}
 		sinkInfo[ahasSinkTimeKey] = timeNow
 		sinkInfo[ahasSinkNameKey] = tableName
@@ -379,12 +384,32 @@ func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []co
 		sinkInfo[ahasSinkRegionKey] = e.nodeRegion
 		sinkInfo[ahasSinkProviderKey] = e.nodeProvider
 		sinkInfo[ahasSinkClusterKey] = e.nodeCluster
-		sinkInfo[ahasSinkValueKey] = mv.value
-		jsonStr, err := json.Marshal(sinkInfo)
-		if err == nil {
-			sinkValues = append(sinkValues, fmt.Sprintf("%s\n", string(jsonStr)))
-		}
 
+		jsonBlob, err := json.Marshal(sinkInfo)
+		if err != nil {
+			continue
+		}
+		labelDownSampleKey := string(jsonBlob)
+		sinkInfo[ahasSinkValueKey] = mv.value
+		if valueSpec, ok := labelDownsample[labelDownSampleKey]; !ok {
+			valueSpec = downSampleSpec {
+				MetricValue: mv,
+				SinkValue: sinkInfo,
+			}
+			labelDownsample[labelDownSampleKey] = valueSpec
+		} else {
+			valueSpec.MetricValue.value += mv.value
+			valueSpec.SinkValue[ahasSinkValueKey] = valueSpec.MetricValue.value
+			labelDownsample[labelDownSampleKey] = valueSpec
+			//log.Printf("labelDownsample %s", labelDownSampleKey)
+		}
+	}
+	for _, value := range labelDownsample {
+		exportValues = append(exportValues, value.MetricValue)
+		jsonBlob, err := json.Marshal(value.SinkValue)
+		if err == nil {
+			sinkValues = append(sinkValues, string(jsonBlob))
+		}
 	}
 	return exportValues, sinkValues, nil
 }
