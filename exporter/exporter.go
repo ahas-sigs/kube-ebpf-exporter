@@ -408,7 +408,7 @@ func (e *Exporter) tableValues(module *bcc.Module, tableName string, labels []co
 		exportValues = append(exportValues, value.MetricValue)
 		jsonBlob, err := json.Marshal(value.SinkValue)
 		if err == nil {
-			sinkValues = append(sinkValues, string(jsonBlob))
+			sinkValues = append(sinkValues, fmt.Sprintf("%s\n", string(jsonBlob)))
 		}
 	}
 	return exportValues, sinkValues, nil
