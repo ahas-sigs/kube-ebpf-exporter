@@ -1,8 +1,6 @@
 package decoder
 
 import (
-	"fmt"
-
 	"github.com/ahas-sigs/kube-ebpf-exporter/config"
 )
 
