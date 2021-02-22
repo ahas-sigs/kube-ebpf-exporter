@@ -519,14 +519,17 @@ func (e *Exporter) addSinkEvent() {
 	data, err := json.Marshal(eventInfo)
 	if err != nil {
 		log.Printf("write %s fail, %s", ahasEventPath, err)
+		fl.Close()
 		return
 	}
 	rawEvent := fmt.Sprintf("%s\n", data)
 	_, err = fl.Write([]byte(rawEvent))
 	if err != nil {
 		log.Printf("write %s fail, %s", ahasEventPath, err)
+		fl.Close()
 		return
 	}
+	fl.Close()
 }
 
 func (e *Exporter) dumpSinkValues() {
@@ -537,8 +540,15 @@ func (e *Exporter) dumpSinkValues() {
 		e.saveSinkValues(sinkValues)
 	}
 }
+
+type sinkMetric struct {
+	Size  int   `json: "size"`
+	Count int   `json: "count"`
+	Cost  int64 `json: "cost"`
+}
+
 func (e *Exporter) saveSinkValues(sinkValues []string) {
-	log.Printf("recv %d events", len(sinkValues))
+	event := sinkMetric{Count: len(sinkValues)}
 	e.sinkMutex.Lock()
 	defer e.sinkMutex.Unlock()
 	timeNow := time.Now()
@@ -557,8 +567,13 @@ func (e *Exporter) saveSinkValues(sinkValues []string) {
 		return
 	}
 	fw := bufio.NewWriter(gf)
+	totalWriteSize := 0
 	for _, data := range sinkValues {
-		fw.WriteString(data)
+		writeSize, err := fw.WriteString(data)
+		if err != nil {
+			log.Printf("write error, %s", err)
+		}
+		totalWriteSize += writeSize
 	}
 	fw.Flush()
 	gf.Close()
@@ -566,6 +581,12 @@ func (e *Exporter) saveSinkValues(sinkValues []string) {
 	if strings.Compare(sinkOutPutFile, e.sinkOutPutFile) != 0 {
 		e.sinkOutPutFile = sinkOutPutFile
 		e.addSinkEvent()
+	}
+	event.Size = totalWriteSize
+	event.Cost = time.Now().Sub(timeNow).Milliseconds()
+	jsonBlob, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("%s", string(jsonBlob))
 	}
 	return
 }
