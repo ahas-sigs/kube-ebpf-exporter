@@ -56,6 +56,8 @@ const (
 )
 
 const (
+	///dryRun Mode, just drop data
+	Sink_Mode_DryRun = -1
 	///only enable export, disable sink, default mode
 	Sink_Mode_None = 0
 	///enable sink and export
@@ -241,6 +243,9 @@ func (e *Exporter) collectCounters(ch chan<- prometheus.Metric) {
 	allSinkValues := []string{}
 	for _, program := range e.config.Programs {
 		for _, counter := range program.Metrics.Counters {
+			if counter.SinkMode == Sink_Mode_DryRun {
+				continue
+			}
 			tableValues, sinkValues, err := e.tableValues(e.modules[program.Name], counter.Table, counter.Labels)
 			if err != nil {
 				log.Printf("Error getting table %q values for metric %q of program %q: %s", counter.Table, counter.Name, program.Name, err)
