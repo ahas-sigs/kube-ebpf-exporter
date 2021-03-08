@@ -55,7 +55,7 @@ type KubeContainerNameOrPid struct {
 // Decode transforms pid representation into a kubernetes namespace and pod as string
 func (k *KubePodNamespace) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
-	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
+	info, err := k.ctx.getKubeInfo(byteOrder.Uint64(in))
 	if err != nil {
 		return nil, ErrSkipLabelSet
 	}
@@ -66,7 +66,7 @@ func (k *KubePodNamespace) Decode(in []byte, conf config.Decoder) ([]byte, error
 // Decode transforms pid representation into a kubernetes pod name as string
 func (k *KubePodName) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
-	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
+	info, err := k.ctx.getKubeInfo(byteOrder.Uint64(in))
 	if err != nil {
 		return nil, ErrSkipLabelSet
 	}
@@ -77,7 +77,7 @@ func (k *KubePodName) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 // Decode transforms pid representation into a kubernetes container name as string
 func (k *KubeContainerName) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
-	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
+	info, err := k.ctx.getKubeInfo(byteOrder.Uint64(in))
 	if err != nil {
 		return nil, ErrSkipLabelSet
 	}
@@ -88,12 +88,12 @@ func (k *KubeContainerName) Decode(in []byte, conf config.Decoder) ([]byte, erro
 // Decode transforms pid representation into a kubernetes container name, if no foud return pid instead
 func (k *KubeContainerNameOrPid) Decode(in []byte, conf config.Decoder) ([]byte, error) {
 	byteOrder := bcc.GetHostByteOrder()
-	info, err := k.ctx.getKubeInfo(byteOrder.Uint32(in))
+	info, err := k.ctx.getKubeInfo(byteOrder.Uint64(in))
 	if err != nil {
 		return nil, ErrSkipLabelSet
 	}
 	if info.kubeContainerName == DefaultKubeContextValue {
-		info.kubeContainerName = fmt.Sprintf("pid-%d", byteOrder.Uint32(in))
+		info.kubeContainerName = fmt.Sprintf("pid-%d", byteOrder.Uint64(in))
 		return nil, nil
 	}
 	b := []byte(info.kubeContainerName)
@@ -101,15 +101,21 @@ func (k *KubeContainerNameOrPid) Decode(in []byte, conf config.Decoder) ([]byte,
 }
 
 // getKubeInfo implement main logic convert container id to kubernetes context
-func (k *KubeContext) getKubeInfo(pid uint32) (info KubeInfo, err error) {
+func (k *KubeContext) getKubeInfo(pidInfo uint64) (info KubeInfo, err error) {
+	var pid uint32 = uint32(pidInfo)
+	var ppid uint32 = uint32(pidInfo >> 32)
 	info.kubePodNamespace = DefaultKubeContextValue
 	info.kubePodName = DefaultKubeContextValue
 	info.kubeContainerName = DefaultKubeContextValue
-	path := fmt.Sprintf("/proc/%d/cgroup", pid)
 
+	path := fmt.Sprintf("/proc/%d/cgroup", pid)
 	r, err := os.Open(path)
 	if err != nil {
-		return
+		path = fmt.Sprintf("/proc/%d/cgroup", ppid)
+		r, err = os.Open(path)
+		if err != nil {
+			return
+		}
 	}
 	defer func() {
 		if rerr := r.Close(); rerr != nil {
