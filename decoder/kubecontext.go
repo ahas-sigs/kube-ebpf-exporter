@@ -133,6 +133,45 @@ func (k *KubeContext) getKubeInfoFromCache(pidInfo uint64) (info KubeInfo, ok bo
 	return
 }
 
+func (k *KubeContext) useKubeInfoFromComm(pidInfo uint64) (info KubeInfo) {
+	var pid uint32 = uint32(pidInfo)
+	var ppid uint32 = uint32(pidInfo >> 32)
+
+	info.kubePodNamespace = DefaultKubeContextValue
+	info.kubePodName = DefaultKubeContextValue
+	info.kubeContainerName = DefaultKubeContextValue
+	path := fmt.Sprintf("/proc/%d/comm", pid)
+	r, err := os.Open(path)
+	if err != nil {
+		path = fmt.Sprintf("/proc/%d/comm", ppid)
+		r, err = os.Open(path)
+		if err != nil {
+			return
+		}
+	}
+	defer func() {
+		if rerr := r.Close(); rerr != nil {
+			err = rerr
+		}
+	}()
+	reader := bufio.NewReader(r)
+	text, _, err := reader.ReadLine()
+	if err != nil {
+		return
+	}
+	parts := strings.SplitN(string(text), "/", 2)
+	command := parts[0]
+	commLen := len(command)
+	if commLen > 10 {
+		commLen = 10
+	}
+	hostCommand := string(command[0:commLen])
+	info.kubePodNamespace = "__host_command"
+	info.kubePodName = hostCommand
+	info.kubeContainerName = hostCommand
+	return
+}
+
 func (k *KubeContext) setKubeInfoFromCache(pidInfo uint64, info KubeInfo) {
 	if !info.fullInfo {
 		return
@@ -192,12 +231,13 @@ func (k *KubeContext) getKubeInfo(pidInfo uint64) (info KubeInfo, err error) {
 			info, err = k.inspectKubeInfo(containerID)
 			if err == nil {
 				k.setKubeInfoFromCache(pidInfo, info)
+			} else {
+				info = k.useKubeInfoFromComm(pidInfo)
 			}
 			return
 		}
 	}
-	k.setKubeInfoFromCache(pidInfo, info)
-	err = fmt.Errorf("kubeinfo match failed")
+	info = k.useKubeInfoFromComm(pidInfo)
 	return
 }
 
