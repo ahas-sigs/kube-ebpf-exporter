@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
@@ -17,19 +18,24 @@ import (
 
 const (
 	// when fail get kubernetes labe fail use DefaultKubeContextValue  as default
-	DefaultKubeContextValue = "unknown"
+	DefaultKubeContextValue       = "unknown"
+	MaxCachePidKubeInfoTimeSecond = 90
 )
 
 // KubeInfo kubernetes context info
 type KubeInfo struct {
+	fullInfo          bool
 	kubePodNamespace  string
 	kubePodName       string
 	kubeContainerName string
+	kubeSandboxID     string
+	createTime        time.Time
 }
 
 // KubeContext kubernetes context info cache
 type KubeContext struct {
-	kubeContext map[string]KubeInfo
+	kubeContext    map[string]KubeInfo
+	pidKubeContext map[uint32]KubeInfo
 }
 
 // KubePodNamespace is a decoder that transforms pid representation into kubernetes pod namespace
@@ -100,19 +106,67 @@ func (k *KubeContainerNameOrPid) Decode(in []byte, conf config.Decoder) ([]byte,
 	return b, nil
 }
 
+func (k *KubeContext) getKubeInfoFromCache(pidInfo uint64) (info KubeInfo, ok bool) {
+	if k.pidKubeContext == nil || len(k.pidKubeContext) > 5000 {
+		k.pidKubeContext = make(map[uint32]KubeInfo)
+		return
+	}
+	timeNow := time.Now()
+	var pid uint32 = uint32(pidInfo)
+	info, ok = k.pidKubeContext[pid]
+	if ok {
+		if timeNow.Sub(info.createTime) < time.Second*MaxCachePidKubeInfoTimeSecond {
+			return
+		}
+		ok = false
+		delete(k.pidKubeContext, pid)
+	}
+	var ppid uint32 = uint32(pidInfo >> 32)
+	info, ok = k.pidKubeContext[ppid]
+	if ok {
+		if timeNow.Sub(info.createTime) < time.Second*MaxCachePidKubeInfoTimeSecond {
+			return
+		}
+		delete(k.pidKubeContext, ppid)
+		ok = false
+	}
+	return
+}
+
+func (k *KubeContext) setKubeInfoFromCache(pidInfo uint64, info KubeInfo) {
+	if !info.fullInfo {
+		return
+	}
+	var pid uint32 = uint32(pidInfo)
+	var ppid uint32 = uint32(pidInfo >> 32)
+	info.createTime = time.Now()
+	k.pidKubeContext[pid] = info
+	k.pidKubeContext[ppid] = info
+}
+
 // getKubeInfo implement main logic convert container id to kubernetes context
 func (k *KubeContext) getKubeInfo(pidInfo uint64) (info KubeInfo, err error) {
+	var ok bool
+	info, ok = k.getKubeInfoFromCache(pidInfo)
+	if ok {
+		return
+	}
 	var pid uint32 = uint32(pidInfo)
 	var ppid uint32 = uint32(pidInfo >> 32)
 	info.kubePodNamespace = DefaultKubeContextValue
 	info.kubePodName = DefaultKubeContextValue
 	info.kubeContainerName = DefaultKubeContextValue
 
+	if pid <= 1 && ppid <= 1 {
+		return
+	}
 	path := fmt.Sprintf("/proc/%d/cgroup", pid)
 	r, err := os.Open(path)
 	if err != nil {
-		path = fmt.Sprintf("/proc/%d/cgroup", ppid)
-		r, err = os.Open(path)
+		if ppid > 1 {
+			path = fmt.Sprintf("/proc/%d/cgroup", ppid)
+			r, err = os.Open(path)
+		}
 		if err != nil {
 			return
 		}
@@ -136,9 +190,13 @@ func (k *KubeContext) getKubeInfo(pidInfo uint64) (info KubeInfo, err error) {
 		containerID := cgroup[len(cgroup)-1]
 		if len(containerID) == 64 {
 			info, err = k.inspectKubeInfo(containerID)
+			if err == nil {
+				k.setKubeInfoFromCache(pidInfo, info)
+			}
 			return
 		}
 	}
+	k.setKubeInfoFromCache(pidInfo, info)
 	err = fmt.Errorf("kubeinfo match failed")
 	return
 }
@@ -178,18 +236,29 @@ func (k *KubeContext) inspectKubeInfo(containerID string) (info KubeInfo, err er
 		if container.Labels != nil {
 			var tmp KubeInfo
 			tmp.kubePodNamespace = container.Labels["io.kubernetes.pod.namespace"]
+			var fullInfo bool = true
 			if tmp.kubePodNamespace == "" {
+				fullInfo = false
 				tmp.kubePodNamespace = DefaultKubeContextValue
 			}
 			tmp.kubePodName = container.Labels["io.kubernetes.pod.name"]
 			if tmp.kubePodName == "" {
+				fullInfo = false
 				tmp.kubePodName = DefaultKubeContextValue
 			}
 			tmp.kubeContainerName = container.Labels["io.kubernetes.container.name"]
 			if tmp.kubeContainerName == "" {
+				fullInfo = false
 				tmp.kubeContainerName = DefaultKubeContextValue
 			}
-			k.kubeContext[container.ID] = tmp
+			tmp.fullInfo = fullInfo
+			tmp.kubeSandboxID = container.Labels["io.kubernetes.sandbox.id"]
+			if tmp.fullInfo {
+				k.kubeContext[container.ID] = tmp
+				if len(tmp.kubeSandboxID) == 64 {
+					k.kubeContext[tmp.kubeSandboxID] = tmp
+				}
+			}
 		}
 	}
 	info = k.kubeContext[containerID]
