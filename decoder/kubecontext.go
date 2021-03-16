@@ -161,6 +161,8 @@ func (k *KubeContext) useKubeInfoFromComm(pidInfo uint64) (info KubeInfo) {
 	}
 	parts := strings.SplitN(string(text), "/", 2)
 	command := parts[0]
+	parts = strings.SplitN(command, ":", 2)
+	command = parts[0]
 	commLen := len(command)
 	if commLen > 10 {
 		commLen = 10
