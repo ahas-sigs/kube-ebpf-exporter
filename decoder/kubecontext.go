@@ -273,7 +273,6 @@ func (k *KubeContext) inspectKubeInfo(containerID string) (info KubeInfo, err er
 	if err != nil {
 		return
 	}
-
 	for _, container := range containers {
 		if container.Labels != nil {
 			var tmp KubeInfo
@@ -303,6 +302,9 @@ func (k *KubeContext) inspectKubeInfo(containerID string) (info KubeInfo, err er
 			}
 		}
 	}
-	info = k.kubeContext[containerID]
+	info, ok = k.kubeContext[containerID]
+	if !ok {
+		err = fmt.Errorf("match none")
+	}
 	return
 }
