@@ -19,12 +19,11 @@ import (
 const (
 	// when fail get kubernetes labe fail use DefaultKubeContextValue  as default
 	DefaultKubeContextValue       = "unknown"
-	MaxCachePidKubeInfoTimeSecond = 90
+	MaxCachePidKubeInfoTimeSecond = 30
 )
 
 // KubeInfo kubernetes context info
 type KubeInfo struct {
-	fullInfo          bool
 	kubePodNamespace  string
 	kubePodName       string
 	kubeContainerName string
@@ -50,11 +49,6 @@ type KubePodName struct {
 
 // KubeContainerName is a decoder that transforms pid representation into kubernetes pod container name
 type KubeContainerName struct {
-	ctx KubeContext
-}
-
-// KubeContainerNameOrPid is a decoder that transforms pid representation into kubernetes pod container name or pid
-type KubeContainerNameOrPid struct {
 	ctx KubeContext
 }
 
@@ -91,23 +85,8 @@ func (k *KubeContainerName) Decode(in []byte, conf config.Decoder) ([]byte, erro
 	return b, nil
 }
 
-// Decode transforms pid representation into a kubernetes container name, if no foud return pid instead
-func (k *KubeContainerNameOrPid) Decode(in []byte, conf config.Decoder) ([]byte, error) {
-	byteOrder := bcc.GetHostByteOrder()
-	info, err := k.ctx.getKubeInfo(byteOrder.Uint64(in))
-	if err != nil {
-		return nil, ErrSkipLabelSet
-	}
-	if info.kubeContainerName == DefaultKubeContextValue {
-		info.kubeContainerName = fmt.Sprintf("pid-%d", byteOrder.Uint64(in))
-		return nil, nil
-	}
-	b := []byte(info.kubeContainerName)
-	return b, nil
-}
-
 func (k *KubeContext) getKubeInfoFromCache(pidInfo uint64) (info KubeInfo, ok bool) {
-	if k.pidKubeContext == nil || len(k.pidKubeContext) > 5000 {
+	if k.pidKubeContext == nil || len(k.pidKubeContext) > 500 {
 		k.pidKubeContext = make(map[uint32]KubeInfo)
 		return
 	}
@@ -140,10 +119,12 @@ func (k *KubeContext) useKubeInfoFromComm(pidInfo uint64) (info KubeInfo) {
 	info.kubePodNamespace = DefaultKubeContextValue
 	info.kubePodName = DefaultKubeContextValue
 	info.kubeContainerName = DefaultKubeContextValue
-	path := fmt.Sprintf("/proc/%d/comm", pid)
+	cgroupPid := pid
+	path := fmt.Sprintf("/proc/%d/comm", cgroupPid)
 	r, err := os.Open(path)
 	if err != nil {
-		path = fmt.Sprintf("/proc/%d/comm", ppid)
+		cgroupPid = ppid
+		path = fmt.Sprintf("/proc/%d/comm", cgroupPid)
 		r, err = os.Open(path)
 		if err != nil {
 			return
@@ -171,18 +152,13 @@ func (k *KubeContext) useKubeInfoFromComm(pidInfo uint64) (info KubeInfo) {
 	info.kubePodNamespace = "__host_command"
 	info.kubePodName = hostCommand
 	info.kubeContainerName = hostCommand
+	k.setKubeInfoFromCache(cgroupPid, info)
 	return
 }
 
-func (k *KubeContext) setKubeInfoFromCache(pidInfo uint64, info KubeInfo) {
-	if !info.fullInfo {
-		return
-	}
-	var pid uint32 = uint32(pidInfo)
-	var ppid uint32 = uint32(pidInfo >> 32)
+func (k *KubeContext) setKubeInfoFromCache(cgroupPid uint32, info KubeInfo) {
 	info.createTime = time.Now()
-	k.pidKubeContext[pid] = info
-	k.pidKubeContext[ppid] = info
+	k.pidKubeContext[cgroupPid] = info
 }
 
 // getKubeInfo implement main logic convert container id to kubernetes context
@@ -198,14 +174,17 @@ func (k *KubeContext) getKubeInfo(pidInfo uint64) (info KubeInfo, err error) {
 	info.kubePodName = DefaultKubeContextValue
 	info.kubeContainerName = DefaultKubeContextValue
 
-	if pid <= 1 && ppid <= 1 {
+	if pid <= 1 {
+		info = k.useKubeInfoFromComm(pidInfo)
 		return
 	}
-	path := fmt.Sprintf("/proc/%d/cgroup", pid)
+	cgroupPid := pid
+	path := fmt.Sprintf("/proc/%d/cgroup", cgroupPid)
 	r, err := os.Open(path)
 	if err != nil {
 		if ppid > 1 {
-			path = fmt.Sprintf("/proc/%d/cgroup", ppid)
+			cgroupPid = ppid
+			path = fmt.Sprintf("/proc/%d/cgroup", cgroupPid)
 			r, err = os.Open(path)
 		}
 		if err != nil {
@@ -229,10 +208,13 @@ func (k *KubeContext) getKubeInfo(pidInfo uint64) (info KubeInfo, err error) {
 		}
 		cgroup := strings.Split(parts[2], "/")
 		containerID := cgroup[len(cgroup)-1]
+		if len(containerID) == 77 && strings.HasPrefix(containerID, "docker-") {
+			containerID = containerID[7:71]
+		}
 		if len(containerID) == 64 {
 			info, err = k.inspectKubeInfo(containerID)
 			if err == nil {
-				k.setKubeInfoFromCache(pidInfo, info)
+				k.setKubeInfoFromCache(cgroupPid, info)
 			} else {
 				info = k.useKubeInfoFromComm(pidInfo)
 			}
@@ -292,9 +274,8 @@ func (k *KubeContext) inspectKubeInfo(containerID string) (info KubeInfo, err er
 				fullInfo = false
 				tmp.kubeContainerName = DefaultKubeContextValue
 			}
-			tmp.fullInfo = fullInfo
 			tmp.kubeSandboxID = container.Labels["io.kubernetes.sandbox.id"]
-			if tmp.fullInfo {
+			if fullInfo {
 				k.kubeContext[container.ID] = tmp
 				if len(tmp.kubeSandboxID) == 64 {
 					k.kubeContext[tmp.kubeSandboxID] = tmp
