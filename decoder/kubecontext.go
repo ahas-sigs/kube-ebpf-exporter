@@ -99,6 +99,7 @@ func (k *KubeContext) getKubeInfoFromCache(pidInfo uint64) (info KubeInfo, ok bo
 		}
 		ok = false
 		delete(k.pidKubeContext, pid)
+		return
 	}
 	var ppid uint32 = uint32(pidInfo >> 32)
 	info, ok = k.pidKubeContext[ppid]
@@ -110,6 +111,11 @@ func (k *KubeContext) getKubeInfoFromCache(pidInfo uint64) (info KubeInfo, ok bo
 		ok = false
 	}
 	return
+}
+
+func (k *KubeContext) setKubeInfoFromCache(cgroupPid uint32, info KubeInfo) {
+	info.createTime = time.Now()
+	k.pidKubeContext[cgroupPid] = info
 }
 
 func (k *KubeContext) useKubeInfoFromComm(pidInfo uint64) (info KubeInfo) {
@@ -154,11 +160,6 @@ func (k *KubeContext) useKubeInfoFromComm(pidInfo uint64) (info KubeInfo) {
 	info.kubeContainerName = hostCommand
 	k.setKubeInfoFromCache(cgroupPid, info)
 	return
-}
-
-func (k *KubeContext) setKubeInfoFromCache(cgroupPid uint32, info KubeInfo) {
-	info.createTime = time.Now()
-	k.pidKubeContext[cgroupPid] = info
 }
 
 // getKubeInfo implement main logic convert container id to kubernetes context
